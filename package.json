@@ -1,0 +1,24 @@
+{
+  "name": "triangulate",
+  "version": "1.0.0",
+  "main": "bin/server",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "John Manero <john.manero@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "aws-sdk": "^2.22.0",
+    "nconf": "^0.8.4"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmanero/triangulate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jmanero/triangulate/issues"
+  },
+  "homepage": "https://github.com/jmanero/triangulate#readme",
+  "description": "Dirt-simple dynamic address tracking"
+}

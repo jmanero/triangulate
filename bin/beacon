@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+'use strict';
+const Config = require('nconf');
+const HTTP = require('http');
+const Path = require('path');
+
+// Load a configuration file
+Config.argv({
+    config: {
+      alias: 'c',
+      describe: 'Path to local turnstile configuration'
+    }
+  });
+
+if (Config.get('config')) {
+  Config.file(Path.resolve(process.cwd(), Config.get('config')));
+}
+
+Config.defaults({
+  port: 8900,
+  bind: '0.0.0.0'
+});
+
+const server = HTTP.createServer(function(req, res) {
+  const message = Buffer.from(JSON.stringify({
+    address: req.socket.remoteAddress
+  }));
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Length', message.length);
+  res.write(message);
+  res.end();
+});
+
+server.listen(Config.get('port'), Config.get('bind'));
