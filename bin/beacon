@@ -1,21 +1,10 @@
 #!/usr/bin/env node
 'use strict';
-const Config = require('nconf');
 const HTTP = require('http');
 const Path = require('path');
-const Winston = require('winston');
 
-// Load a configuration file
-Config.argv({
-    config: {
-      alias: 'c',
-      describe: 'Path to local turnstile configuration'
-    }
-  });
-
-if (Config.get('config')) {
-  Config.file(Path.resolve(process.cwd(), Config.get('config')));
-}
+require('../lib/config');
+require('../lib/log');
 
 Config.defaults({
   port: 8900,
@@ -25,10 +14,6 @@ Config.defaults({
   }
 });
 
-// Create a logger
-const Log = new Winston.Logger(Config.get('log'));
-
-Log.add(Winston.transports.Console);
 Log.info('Starting triangulate beacon', {
   port: Config.get('port'),
   bind: Config.get('bind')
