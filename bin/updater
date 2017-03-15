@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+
+'use strict';
+const Assert = require('assert');
+const AWS = require('aws-sdk');
+const Config = require('nconf');
+const HTTP = require('http');
+const OS = require('os');
+const Path = require('path');
+const Winston = require('winston');
+
+// Load a configuration file
+Config.argv({
+  config: {
+    alias: 'c',
+    describe: 'Path to local turnstile configuration'
+  }
+});
+
+if (Config.get('config')) {
+  Config.file(Path.resolve(process.cwd(), Config.get('config')));
+}
+
+Config.defaults({
+  interval: '30',
+  beacon: {
+    host: 'triangulate.manero.io',
+    port: 8900
+  },
+  hostname: OS.hostname(),
+  aws: {
+    region: 'us-east-1'
+  }
+});
+
+// Check for required configuration parameters
+Assert.ok(Config.get('bucket'), 'Configuration MUST have a `bucket` parameter');
+Assert.ok(Config.get('aws:key'), 'Configuration MUST have an `aws:key` parameter');
+Assert.ok(Config.get('aws:secret'), 'Configuration MUST have an `aws:secret` parameter');
+
+// Create a logger
+const Log = new Winston.Logger(Config.get('log'));
+
+Log.add(Winston.transports.Console);
+Log.info('Starting triangulate updater', {
+  hostname: Config.get('hostname'),
+  bucket: Config.get('bucket'),
+  beacon: Config.get('beacon')
+});
+
+// Create an S3 client
+const client = new AWS.S3({
+  accessKeyId: Config.get('aws:key'),
+  secretAccessKey: Config.get('aws:secret'),
+  region: Config.get('aws:region')
+});
+
+const state = {};
+
+/**
+ * Query the beacon service
+ * @return {Promise<Object>} Resolves with the query's response
+ */
+function lookup() {
+  const beacon = Config.get('beacon');
+
+  Log.debug('Querying beacon service', {
+    beacon
+  })
+
+  return new Promise((resolve, reject) => {
+    const req = HTTP.request(beacon);
+
+    req.on('aborted', () => reject(new Error('Beacon service aborted connection')));
+    req.on('error', (err) => reject(err));
+
+    req.on('response', (res) => {
+      const chunks = [];
+
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf8');
+        const response = JSON.parse(data);
+
+        if (res.statusCode !== 200) {
+          reject({response, code: res.statusCode});
+        }
+
+        Log.debug('Successfully retrieved address from beacon service', response);
+        resolve(response);
+      });
+    });
+
+    req.end();
+  })
+}
+
+/**
+ * Update the record for this host in the specified S3 bucket
+ * @param  {String} address
+ * @return {Promise<Object>}  Resolves with information about the updated record
+ */
+function update(address) {
+  const data = {
+    timestamp: new Date(),
+    hostname: Config.get('hostname'),
+    address
+  };
+
+  return new Promise((resolve, reject) => {
+    client.putObject({
+      Bucket: Config.get('bucket'),
+      Key: Path.join('v1/hostname', data.hostname),
+      Body: JSON.stringify(data),
+      ContentType: 'application/json',
+    }, (err, data) => {
+      if (err) { return reject(err); }
+
+      state.etag = data.ETag;
+      Log.info('Successfully updated record', state);
+
+      resolve(data);
+    });
+  });
+}
+
+function action() {
+  lookup()
+    .then((result) => {
+      if (result.address === state.address) {
+        Log.debug('Address has not changed', state);
+
+        return;
+      }
+
+      state.address = result.address;
+      Log.info('Address has changed', state);
+
+      return update(state.address);
+    })
+    .catch((err) => Log.error(err));
+}
+
+setInterval(action, Config.get('interval') * 1000);
+
+action();
