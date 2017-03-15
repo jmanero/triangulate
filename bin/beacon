@@ -3,6 +3,7 @@
 const Config = require('nconf');
 const HTTP = require('http');
 const Path = require('path');
+const Winston = require('winston');
 
 // Load a configuration file
 Config.argv({
@@ -18,13 +19,27 @@ if (Config.get('config')) {
 
 Config.defaults({
   port: 8900,
-  bind: '0.0.0.0'
+  bind: '0.0.0.0',
+  log: {
+    level: 'info'
+  }
+});
+
+// Create a logger
+const Log = new Winston.Logger(Config.get('log'));
+
+Log.add(Winston.transports.Console);
+Log.info('Starting triangulate beacon', {
+  port: Config.get('port'),
+  bind: Config.get('bind')
 });
 
 const server = HTTP.createServer(function(req, res) {
   const message = Buffer.from(JSON.stringify({
     address: req.socket.remoteAddress
   }));
+
+  Log.info('Processing request', {address: req.socket.remoteAddress});
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Length', message.length);
